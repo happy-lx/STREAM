@@ -103,11 +103,11 @@
  *      NTIMES can also be set on the compile line without changing the source
  *         code using, for example, "-DNTIMES=7".
  */
-#ifdef NTIMES
-#if NTIMES<=1
-#   define NTIMES	10
-#endif
-#endif
+// #ifdef NTIMES
+// #if NTIMES<=1
+// #   define NTIMES	10
+// #endif
+// #endif
 #ifndef NTIMES
 #   define NTIMES	10
 #endif
@@ -180,13 +180,14 @@ static STREAM_TYPE	a[STREAM_ARRAY_SIZE+OFFSET],
 			b[STREAM_ARRAY_SIZE+OFFSET],
 			c[STREAM_ARRAY_SIZE+OFFSET];
 
-static double	avgtime[4] = {0}, maxtime[4] = {0},
-		mintime[4] = {FLT_MAX,FLT_MAX,FLT_MAX,FLT_MAX};
+static double	avgtime[5] = {0}, maxtime[5] = {0},
+		mintime[5] = {FLT_MAX,FLT_MAX,FLT_MAX,FLT_MAX,FLT_MAX};
 
-static char	*label[4] = {"Copy:      ", "Scale:     ",
+static char	*label[5] = {"Set:       ","Copy:      ", "Scale:     ",
     "Add:       ", "Triad:     "};
 
-static double	bytes[4] = {
+static double	bytes[5] = {
+	1 * sizeof(STREAM_TYPE) * STREAM_ARRAY_SIZE,
     2 * sizeof(STREAM_TYPE) * STREAM_ARRAY_SIZE,
     2 * sizeof(STREAM_TYPE) * STREAM_ARRAY_SIZE,
     3 * sizeof(STREAM_TYPE) * STREAM_ARRAY_SIZE,
@@ -212,7 +213,7 @@ main()
     int			k;
     ssize_t		j;
     STREAM_TYPE		scalar;
-    double		t, times[4][NTIMES];
+    double		t, times[5][NTIMES];
 
     /* --- SETUP --- determine precision and check timing --- */
 
@@ -267,7 +268,7 @@ main()
 #pragma omp parallel for
     for (j=0; j<STREAM_ARRAY_SIZE; j++) {
 	    a[j] = 1.0;
-	    b[j] = 2.0;
+	    // b[j] = 2.0;
 	    c[j] = 0.0;
 	}
 
@@ -312,11 +313,21 @@ main()
 #else
 #pragma omp parallel for
 	for (j=0; j<STREAM_ARRAY_SIZE; j++)
-	    c[j] = a[j];
+	    b[j] = 1;
 #endif
 	times[0][k] = mysecond() - times[0][k];
-	
+
 	times[1][k] = mysecond();
+#ifdef TUNED
+        tuned_STREAM_Copy();
+#else
+#pragma omp parallel for
+	for (j=0; j<STREAM_ARRAY_SIZE; j++)
+	    c[j] = a[j];
+#endif
+	times[1][k] = mysecond() - times[1][k];
+	
+	times[2][k] = mysecond();
 #ifdef TUNED
         tuned_STREAM_Scale(scalar);
 #else
@@ -324,9 +335,9 @@ main()
 	for (j=0; j<STREAM_ARRAY_SIZE; j++)
 	    b[j] = scalar*c[j];
 #endif
-	times[1][k] = mysecond() - times[1][k];
+	times[2][k] = mysecond() - times[2][k];
 	
-	times[2][k] = mysecond();
+	times[3][k] = mysecond();
 #ifdef TUNED
         tuned_STREAM_Add();
 #else
@@ -334,9 +345,9 @@ main()
 	for (j=0; j<STREAM_ARRAY_SIZE; j++)
 	    c[j] = a[j]+b[j];
 #endif
-	times[2][k] = mysecond() - times[2][k];
+	times[3][k] = mysecond() - times[3][k];
 	
-	times[3][k] = mysecond();
+	times[4][k] = mysecond();
 #ifdef TUNED
         tuned_STREAM_Triad(scalar);
 #else
@@ -344,14 +355,15 @@ main()
 	for (j=0; j<STREAM_ARRAY_SIZE; j++)
 	    a[j] = b[j]+scalar*c[j];
 #endif
-	times[3][k] = mysecond() - times[3][k];
+	times[4][k] = mysecond() - times[4][k];
 	}
 
     /*	--- SUMMARY --- */
 
     for (k=1; k<NTIMES; k++) /* note -- skip first iteration */
+    // for (k=0; k<NTIMES; k++) /* note -- not skip first iteration */
 	{
-	for (j=0; j<4; j++)
+	for (j=0; j<5; j++)
 	    {
 	    avgtime[j] = avgtime[j] + times[j][k];
 	    mintime[j] = MIN(mintime[j], times[j][k]);
@@ -360,8 +372,9 @@ main()
 	}
     
     printf("Function    Best Rate MB/s  Avg time     Min time     Max time\n");
-    for (j=0; j<4; j++) {
+    for (j=0; j<5; j++) {
 		avgtime[j] = avgtime[j]/(double)(NTIMES-1);
+		// avgtime[j] = avgtime[j]/(double)(NTIMES);
 
 		printf("%s%12.1f  %11.6f  %11.6f  %11.6f\n", label[j],
 	       1.0E-06 * bytes[j]/mintime[j],
